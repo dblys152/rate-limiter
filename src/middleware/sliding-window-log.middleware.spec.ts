@@ -1,0 +1,47 @@
+import { Request, Response, NextFunction } from 'express';
+import { SlidingWindowLogMiddleware } from './sliding-window-log.middleware';
+import { HttpStatus, NestMiddleware } from '@nestjs/common';
+import { SlidingWindowLogOptions } from './sliding-window-log-options';
+
+describe('SlidingWindowLogMiddleware', () => {
+  const WINDOW_SIZE: number = 10000;
+  const MAX_REQUESTS: number = 3;
+  let middleware: NestMiddleware;
+
+  beforeEach(() => {
+    const options: SlidingWindowLogOptions = { windowSize: WINDOW_SIZE, maxRequests: MAX_REQUESTS };
+    middleware = new SlidingWindowLogMiddleware(options) as NestMiddleware;
+  });
+
+  it('제한 내에서 요청을 처리한다', () => {
+    const mockRequest: Partial<Request> = {};
+    const mockResponse: Partial<Response> = {
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+    const mockNext: NextFunction = jest.fn();
+
+    for (let i = 0; i < MAX_REQUESTS; i++) {
+      middleware.use(mockRequest, mockResponse, mockNext);
+    }
+
+    expect(mockResponse.status).not.toHaveBeenCalledWith(HttpStatus.TOO_MANY_REQUESTS);
+    expect(mockNext).toHaveBeenCalledTimes(MAX_REQUESTS);
+  });
+
+  it('제한을 초과하는 요청은 429로 응답한다', () => {
+    const mockRequest: Partial<Request> = {};
+    const mockResponse: Partial<Response> = {
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+    const mockNext: NextFunction = jest.fn();
+
+    for (let i = 0; i < MAX_REQUESTS + 1; i++) {
+      middleware.use(mockRequest, mockResponse, mockNext);
+    }
+
+    expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.TOO_MANY_REQUESTS);
+    expect(mockNext).toHaveBeenCalledTimes(MAX_REQUESTS);
+  });
+});
